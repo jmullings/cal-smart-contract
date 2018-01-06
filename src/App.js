@@ -13,7 +13,7 @@ import BaseComponent from './components/BaseComponent.js';
 import TitleComponent from './components/TitleComponent.js';
 import {combination} from 'js-combinatorics';
 import {timeFormat} from 'd3-time-format'
-import {ChartContainer, PieChart} from 'dc-react'
+import {ChartContainer, PieChart, RowChart} from 'dc-react'
 import _ from 'lodash';
 import {
     BasicForm,
@@ -29,14 +29,16 @@ const dateParse = timeFormat("%B %d, %Y");
 let newData;
 let Dimes = [];
 let DimesCount = [];
+let TableRows = [];
 
 class CrossfilterContext {
     constructor(data) {
         this.crossfilter = crossfilter(data);
         this.groupAll = this.crossfilter.groupAll();
-
         let that = this;
-        combination([...newData], 1).forEach(function (d, i) {
+
+        combination([...new Set(Object.keys(data[0]))], 1).forEach(function (d, i) {
+
             Dimes.push(that.crossfilter.dimension(function (g) {
                 return g[d[0]];
             }));
@@ -49,12 +51,7 @@ class CrossfilterContext {
 
                 return g[d[0]];
             }).group().reduceSum(r => r[d[0]]));
-
         });
-        console.log("Dimes: ", Dimes);
-        // this.datePostedDimension = this.crossfilter.dimension(d => dateParse(new Date(d["Date Created"])));
-        // minDate = dateParse(new Date(this.datePostedDimension.bottom(1)[0]["Date Created"]));
-        // maxDate = dateParse(new Date(this.datePostedDimension.top(1)[0]["Date Created"]));
     }
 }
 
@@ -67,11 +64,10 @@ class PieComponent extends BaseComponent {
             if (!callBack) {
                 return null;
             }
-            newData = props.dimension;
             ///Format Data for charts///
             newData.forEach(function (d, i) {
-                d["ShareHolder Count"] = +d.name;
-                d["Shares Total"] = +d.shares;
+                // d["ShareHolder Count"] = +d.name;
+                // d["Shares Total"] = +d.shares;
                 d["Date Created"] = dateParse(new Date());
             });
             callBack(new CrossfilterContext(newData))
@@ -83,15 +79,25 @@ class PieComponent extends BaseComponent {
             <ChartContainer className="container" crossfilterContext={this.crossfilterContext}>
 
                 <TitleComponent dimension={this.dimension}/>
+                {console.log("this.dimension", this.dimension)}
                 <PieChart
                     id="PieChart"
                     dimension={ctx => Dimes[this.dimension]}
                     group={ctx => Dimes[this.group].group()}
-                    width={350}
-                    height={220}
+                    width={250}
+                    height={150}
                     transitionDuration={1000}
                     radius={90}
                     innerRadius={40}/>
+                <RowChart
+                    id="RowChart"
+                    dimension={ctx => Dimes[this.dimension]}
+                    group={ctx => Dimes[this.group].group()}
+                    width={450} height={150}
+                    transitionDuration={500}
+                    elasticX={true}
+                    xAxis={axis => axis.ticks(5)}
+                    yAxis={axis => axis.ticks(10)}/>
             </ChartContainer>
         );
     }
@@ -112,8 +118,9 @@ class App extends Component {
             last_name: [],
             email_address: [],
             listed_shares: [],
-            dataSet: [{"name": null, "shares": 0}],
-            dataGroup: [{"name": null, "shares": 0}]
+            percent_shares: [],
+            dataSet: null,
+            dataGroup: null
         };
         this.SMTestInstance = null;
         this.crossfilterContext = this.props.crossfilterContext;
@@ -130,7 +137,7 @@ class App extends Component {
                     web3: results.web3
                 });
 
-                console.log("this.state.web3", this.state.web3);
+                // console.log("this.state.web3", this.state.web3);
                 // Instantiate contract once web3 provided.
                 this.instantiateContract()
             })
@@ -154,12 +161,14 @@ class App extends Component {
                 return self.SMTestInstance.getPeople.call()
             }).then((result) => {
                 var data = result;
+                let shares = String(data[3]).split(',');
+                let percent = String(data[4]).split(',');
                 this.setState({
                     first_name: String(data[0]).split(','),
                     last_name: String(data[1]).split(','),
                     email_address: String(data[2]).split(','),
-                    listed_shares: String(data[3]).split(',')
-
+                    listed_shares: shares,
+                    percent_shares: percent
                 })
             })
         });
@@ -177,22 +186,6 @@ class App extends Component {
             }
         };
 
-        let TableRows = [];
-
-        _.each(this.state.first_name, (value, index) => {
-            TableRows.push(
-                <tr key={index}>
-                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.first_name[index])}</td>
-                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.last_name[index])}</td>
-                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.email_address[index])}</td>
-                    <td style={{padding: 3}}>{this.state.listed_shares[index]}</td>
-                </tr>
-            );
-            this.state.dataSet.push({
-                name: this.state.web3.toAscii(this.state.first_name[index]),
-                shares: this.state.listed_shares[index]
-            })
-        });
 
         let SkyDialog = {
             overflow: "scroll"
@@ -309,6 +302,7 @@ class App extends Component {
                                 <th style={{padding: 3}}>Last Name</th>
                                 <th style={{padding: 3}}>Email Address</th>
                                 <th style={{padding: 3}}>Listed Shares</th>
+                                <th style={{padding: 3}}>Percent (%)</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -344,15 +338,11 @@ class App extends Component {
                     <hr/>
                     <div className="chart-title">
                         {
-                            (this.state.dataSet.length > 1)
-                                ? <PieComponent dimension={this.state.dataSet} group={this.state.dataSet}
-                                                key={new Date().getTime()}
-                                                number={new Date().getTime()}/>
-                                : <image src={'./img/ex-chart.png'}
-                                       style={{height: 150, position: "middle"}} alt="base_image"/>
+                            (this.state.dataSet)
+                                ? this.state.dataSet
+                                : null
                         }
                     </div>
-                    <br/><br/>
                     <img src={'./img/calcorp.JPG'} style={{height: 35, marginLeft: "75%"}} alt="logo"/>
                 </SkyLight>
                 <SkyLight hideOnOverlayClicked
@@ -363,70 +353,76 @@ class App extends Component {
                           dialogStyles={SkyDialog}>
                     <hr/>
                     <div className="chart-title">
-                       <pre>{
+                       <pre style={{color:"red"}}>{
                            `
-                           pragma solidity ^0.4.11;
+    pragma solidity ^0.4.8;
 
-                           contract SmartContractTest {
+    contract SmartContractTest {
 
-                           address owner;
-                           address apply;
-                           uint public value;
-                           uint public numSH;
+    address owner;
+    address apply;
+    uint public value;
+    uint public numSH;
 
+    ShareHolders[] public shareholders;
+    function SmartContractTest(uint _numSHolders) public{
+        owner = msg.sender;
+        numSH=_numSHolders;
 
-                           ShareHolders[] public shareholders;
-                           function SmartContractTest(uint _numSHolders) public{
-                           owner = msg.sender;
-                           numSH=_numSHolders;
-                           // uint[] memory a = new uint[](_numSHolders);
-                       }
+    }
 
-                           struct ShareHolders {
-                           uint weight; // weight is accumulated by delegation
-                           bool claimed;  // if true, that person already claimed account
-                           address delegate; // person delegated to
-                           bytes32 firstName; //Share holders name
-                           bytes32 lastName; //Share holders name
-                           bytes32 email; //Share holders email
-                           uint shares; // number of accumulated Shares
-                       }
+    struct ShareHolders {
+    uint weight; // weight is accumulated by delegation
+    bool claimed;  // if true, that person already claimed account
+    address delegate; // person delegated to
+    bytes32 firstName; //Share holders name
+    bytes32 lastName; //Share holders name
+    bytes32 email; //Share holders email
+    uint shares; // number of accumulated Shares
+    }
 
-                           //mapping(address => SH_Struct) public sholder;
-                           function addPerson(bytes32 _firstName, bytes32 _lastName, bytes32 _email, uint _shares) payable public returns (bool success) {
-                           ShareHolders memory newPerson;
-                           newPerson.firstName = _firstName;
-                           newPerson.lastName = _lastName;
-                           newPerson.email = _email;
-                           newPerson.shares = _shares;
-                           shareholders.push(newPerson);
-                           return true;
-                       }
+    function addPerson(bytes32 _firstName, bytes32 _lastName, bytes32 _email, uint _shares) payable public returns (bool success) {
+        ShareHolders memory newPerson;
+        newPerson.firstName = _firstName;
+        newPerson.lastName = _lastName;
+        newPerson.email = _email;
+        newPerson.shares = _shares;
+        shareholders.push(newPerson);
+        numSH += _shares;
+        return true;
+    }
 
-                           function getPeople() public constant returns (bytes32[], bytes32[], bytes32[], uint[]) {
+    function getPeople() public constant returns (bytes32[], bytes32[], bytes32[], uint[]) {
 
-                           uint length = shareholders.length;
+        uint length = shareholders.length;
 
-                           bytes32[] memory firstNames = new bytes32[](length);
-                           bytes32[] memory lastNames = new bytes32[](length);
-                           bytes32[] memory email = new bytes32[](length);
-                           uint[] memory shares = new uint[](length);
+        bytes32[] memory firstNames = new bytes32[](length);
+        bytes32[] memory lastNames = new bytes32[](length);
+        bytes32[] memory email = new bytes32[](length);
+        uint[] memory shares = new uint[](length);
+        uint[] memory percent = new uint[](length);
 
-                           for (uint i = 0; i < length; i++) {
-                           ShareHolders memory currentPerson;
-                           currentPerson = shareholders[i];
-                           firstNames[i] = currentPerson.firstName;
-                           lastNames[i] = currentPerson.lastName;
-                           email[i] = currentPerson.email;
-                           shares[i] = currentPerson.shares;
-                       }
-                           return (firstNames, lastNames, email,shares);
-                       }
+        for (uint i = 0; i < length; i++) {
+            ShareHolders memory currentPerson;
+            currentPerson = shareholders[i];
+            firstNames[i] = currentPerson.firstName;
+            lastNames[i] = currentPerson.lastName;
+            email[i] = currentPerson.email;
+            shares[i] = currentPerson.shares;
+            percent[i] = currentPerson.shares*(numSH/100);
 
-                           function get() public view returns (uint) {
-                           return numSH;
-                       }
-                       }`
+        }
+        return (firstNames, lastNames, email,shares);
+    }
+
+    function set(uint x) public {
+        numSH = x * 10;
+    }
+
+    function get() public constant returns (uint) {
+        return numSH;
+    }
+    }`
                        }
 
                        </pre>
@@ -446,65 +442,82 @@ class App extends Component {
     setDetails(event) {
         event.preventDefault();
         var self = this;
+        Object.assign(this.state, this.serialization());
         this.refs.myForm.validate(function (errs) {
             if (errs.length === 4) {
                 alert('Please enter a search value!');
                 return;
             }
-            Object.assign(self.state, self.serialization());
-            self.forceUpdate();
+            // self.forceUpdate();
+            self.instantiateContract()
             self.refs.detailsWithCallBacks.show();
         });
-
-        console.log(this.state.dataSet);
-
-    }
-    
-    showChart(event) {
-        event.preventDefault();
-        var self = this;
-        this.refs.myForm.validate(function (errs) {
-            if (errs.length === 4) {
-                alert('Please enter a search value!');
-                return;
-            }
-            Object.assign(self.state, self.serialization());
-            self.forceUpdate();
-            self.refs.detailsWithChart.show();
+        _.each(this.state.first_name, (value, index) => {
+            TableRows.push(
+                <tr key={index}>
+                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.first_name[index])}</td>
+                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.last_name[index])}</td>
+                    <td style={{padding: 3}}>{this.state.web3.toAscii(this.state.email_address[index])}</td>
+                    <td style={{padding: 3}}>{this.state.listed_shares[index]}</td>
+                    <td style={{padding: 3}}>{(this.state.listed_shares[index] * (100 / this.state.percent_shares[index])).toFixed(4)}</td>
+                </tr>
+            );
         });
 
     }
-    
+
+    showChart(event) {
+        event.preventDefault();
+
+        newData = [];
+        _.each(this.state.first_name, (value, index) => {
+            let name = this.state.web3.toAscii(this.state.first_name[index]).replace(/^\0+/, '').replace(/\0+$/, '');
+            if (name)
+                newData.push({
+                    key: index,
+                    name: name,
+                    shares: this.state.listed_shares[index],
+                    percent: this.state.listed_shares[index] * (100 / this.state.percent_shares[index])
+                })
+        });
+        this.setState({
+            dataSet: <PieComponent dimension={1} group={1}
+                                   key={new Date().getTime()}
+                                   number={new Date().getTime()}/>
+        })
+
+        this.refs.detailsWithChart.show();
+    }
+
     showContract(event) {
         event.preventDefault();
         this.refs.detailsWithContract.show();
     }
 
     onSubmit(event) {
+
         event.preventDefault();
         var self = this;
         console.log('Submitted. Checking async errors.');
+        Object.assign(this.state, this.serialization());
         this.refs.myForm.validate(function (errs) {
             if (errs) {
                 alert('There are ' + errs.length + ' errors.');
                 return;
             }
-            Object.assign(self.state, self.serialization());
-            // console.log(self.state.firstNew, self.state.lastNew, self.state.emailNew, self.state.listedNew)
             self.SMTestInstance.addPerson(self.state.firstNew, self.state.lastNew, self.state.emailNew, self.state.listedNew, {
                 from: self.state.web3.eth.accounts[0],
                 gas: 4500000
             }).then((res)=> {
-                    Object.assign(self.state, res);
-                    self.forceUpdate();
-
-                    // alert('Your details have been saved to the BlockChain. Please use search to view your shares dividends!\n' + res.tx);
-                    // console.log(res)
-                })
+                Object.assign(self.state, res);
+                self.instantiateContract();
+            })
         });
+        this.instantiateContract();
         this.refs.detailsWithBlockChain.show();
 
     }
+
 
     serialization() {
         if (this.refs.myForm) {
